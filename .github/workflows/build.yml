@@ -77,31 +77,41 @@ jobs:
           cp ../patches/mt7621_notion_r281.dts target/linux/ramips/dts/
           
           echo "🛠️ 2. Menyuntikkan definisi profil perangkat ke mt7621.mk..."
-          cat << 'EOF' >> target/linux/ramips/image/mt7621.mk
-
-          define Device/notion_r281
-            $(Device/dsa-migration)
-            BLOCKSIZE := 128k
-            PAGESIZE := 2048
-            KERNEL_SIZE := 4096k
-            IMAGE_SIZE := 129792k
-            UBINIZE_OPTS := -E 5
-            IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
-            DEVICE_VENDOR := Notion
-            DEVICE_MODEL := R281
-            DEVICE_PACKAGES := kmod-usb3 kmod-mt7603 kmod-mt7615e kmod-mt7663-firmware-ap kmod-usb-net-rndis kmod-usb-acm comgt-ncm uboot-envtools
-          endef
-          TARGET_DEVICES += notion_r281
-          EOF
+          echo "" >> target/linux/ramips/image/mt7621.mk
+          echo "define Device/notion_r281" >> target/linux/ramips/image/mt7621.mk
+          echo "  \$(Device/dsa-migration)" >> target/linux/ramips/image/mt7621.mk
+          echo "  BLOCKSIZE := 128k" >> target/linux/ramips/image/mt7621.mk
+          echo "  PAGESIZE := 2048" >> target/linux/ramips/image/mt7621.mk
+          echo "  KERNEL_SIZE := 4096k" >> target/linux/ramips/image/mt7621.mk
+          echo "  IMAGE_SIZE := 129792k" >> target/linux/ramips/image/mt7621.mk
+          echo "  UBINIZE_OPTS := -E 5" >> target/linux/ramips/image/mt7621.mk
+          echo "  IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata" >> target/linux/ramips/image/mt7621.mk
+          echo "  DEVICE_VENDOR := Notion" >> target/linux/ramips/image/mt7621.mk
+          echo "  DEVICE_MODEL := R281" >> target/linux/ramips/image/mt7621.mk
+          echo "  DEVICE_PACKAGES := kmod-usb3 kmod-mt7603 kmod-mt7615e kmod-mt7663-firmware-ap kmod-usb-net-rndis kmod-usb-acm comgt-ncm uboot-envtools" >> target/linux/ramips/image/mt7621.mk
+          echo "endef" >> target/linux/ramips/image/mt7621.mk
+          echo "TARGET_DEVICES += notion_r281" >> target/linux/ramips/image/mt7621.mk
           
           echo "🛠️ 3. Mengatur susunan Port LAN/WAN agar tidak tertukar..."
-          sed -i '/mikrotik,routerboard-760igs)/i \	notion,r281)|\n\tnotion,r281)\n\t\tucidef_set_interfaces_lan_wan "lan2 lan3 lan4" "wan"\n\t\t;;\n' target/linux/ramips/mt7621/base-files/etc/board.d/02_network
+          if [ -f target/linux/ramips/mt7621/base-files/etc/board.d/02_network ]; then
+            sed -i '/mikrotik,routerboard-760igs)/i \	notion,r281)|\n\tnotion,r281)\n\t\tucidef_set_interfaces_lan_wan "lan2 lan3 lan4" "wan"\n\t\t;;\n' target/linux/ramips/mt7621/base-files/etc/board.d/02_network
+          else
+            echo "⚠️ File 02_network tidak ditemukan, dilewati."
+          fi
 
           echo "🛠️ 4. Memberikan izin fitur Sysupgrade lewat Web LuCI..."
-          sed -i '/netis,wf2881|\\/a \	notion,r281|\\' target/linux/ramips/mt7621/base-files/lib/upgrade/platform.sh
+          if [ -f target/linux/ramips/mt7621/base-files/lib/upgrade/platform.sh ]; then
+            sed -i '/netis,wf2881|\\/a \	notion,r281|\\' target/linux/ramips/mt7621/base-files/lib/upgrade/platform.sh
+          else
+            echo "⚠️ File platform.sh tidak ditemukan, dilewati."
+          fi
 
           echo "🛠️ 5. Mendaftarkan uboot-envtools untuk pembacaan partisi..."
-          sed -i '/mts,wg430223|\\/a \	notion,r281|\\' package/boot/uboot-envtools/files/ramips
+          if [ -f package/boot/uboot-envtools/files/ramips ]; then
+            sed -i '/mts,wg430223|\\/a \	notion,r281|\\' package/boot/uboot-envtools/files/ramips
+          else
+            echo "⚠️ File uboot-envtools ramips tidak ditemukan, dilewati."
+          fi
           
           for i in 1 2 3; do
             echo "Attempt $i to update feeds..."
