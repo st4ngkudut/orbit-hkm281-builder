@@ -1,4 +1,4 @@
-#by ST4NGKUDUT (Modded for Vanilla + Patchwork R281 + Dynamic Vermagic)
+#by ST4NGKUDUT (Modded for Vanilla + Local Patch HKM281 + Dynamic Vermagic)
 name: 'Build OpenWrt Vanilla + Patch HKM281'
 
 on:
@@ -27,7 +27,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Checkout Kode Repositori
+      - name: 1. Checkout Kode Repositori (Mengambil folder patches kustommu)
         uses: actions/checkout@v4
 
       - name: 2. Siapkan Variabel Build
@@ -57,7 +57,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-openwrt-${{ github.event.inputs.openwrt_version }}-
 
-      - name: 6. Checkout Versi, Ambil Patch, & Perbarui Feeds
+      - name: 6. Checkout Versi, Injeksi File Lokal, & Perbarui Feeds
         working-directory: ./openwrt
         run: |
           echo "BUILD_DATE=$(date +%Y-%m-%d)" >> $GITHUB_ENV
@@ -66,14 +66,27 @@ jobs:
             git checkout ${{ github.event.inputs.openwrt_version }}
           fi
           
-          git config --global user.name "github-actions"
-          git config --global user.email "github-actions@github.com"
+          echo "🛠️ Menyalin file DTS kustom dari repositori lokal..."
+          # Perintah cp di bawah ini menyalin file yang kamu buat di Langkah 1 tadi
+          cp ../patches/mt7621_notion_r281.dts target/linux/ramips/dts/
           
-          echo "📥 Mengunduh patch Notion R281 dari Patchwork..."
-          wget "https://patchwork.ozlabs.org/project/openwrt/patch/f77f0711719eec7d0d8892ca8ab058b2@imap4.upd.edu.ph/raw/" -O hkm281.patch
+          echo "🛠️ Menyuntikkan definisi profil perangkat ke mt7621.mk..."
+          cat << 'EOF' >> target/linux/ramips/image/mt7621.mk
           
-          echo "🛠️ Menerapkan patch ke OpenWrt Vanilla..."
-          git am hkm281.patch || git apply --3way hkm281.patch || git apply --reject hkm281.patch
+          define Device/notion_r281
+            $(Device/dsa-migration)
+            BLOCKSIZE := 128k
+            PAGESIZE := 2048
+            KERNEL_SIZE := 4096k
+            IMAGE_SIZE := 129792k
+            UBINIZE_OPTS := -E 5
+            IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+            DEVICE_VENDOR := Notion
+            DEVICE_MODEL := R281
+            DEVICE_PACKAGES := kmod-usb3 kmod-mt7603 kmod-mt7615e kmod-mt7663-firmware-ap kmod-usb-net-rndis kmod-usb-acm comgt-ncm uboot-envtools
+          endef
+          TARGET_DEVICES += notion_r281
+          EOF
           
           for i in 1 2 3; do
             echo "Attempt $i to update feeds..."
@@ -92,10 +105,8 @@ jobs:
       - name: 7. Sinkronisasi Vermagic Kernel
         working-directory: ./openwrt
         run: |
-          # Ambil versi dengan menghapus huruf 'v' di depan (contoh: 24.10.5)
           VERSION=$(echo ${{ github.event.inputs.openwrt_version }} | sed 's/^v//')
           
-          # Tentukan URL repository kernel resmi berdasarkan versi
           if [ "$VERSION" == "snapshot" ]; then
             KMODS_URL="https://downloads.openwrt.org/snapshots/targets/ramips/mt7621/kmods/"
           else
@@ -103,21 +114,14 @@ jobs:
           fi
           
           echo "🔍 Mencari vermagic resmi di: $KMODS_URL"
-          
-          # Melakukan parsing (Scraping) untuk menemukan string folder kmods yang mengandung hash
           KMODS_DIR=$(curl -s "$KMODS_URL" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+-[0-9]+-[a-f0-9]+' | head -n 1)
           
           if [ -z "$KMODS_DIR" ]; then
-            echo "::warning::Gagal menemukan vermagic di server resmi. Vermagic kustom diabaikan."
+            echo "::warning::Gagal menemukan vermagic resmi."
           else
-            # Ekstrak hash dari string (mengambil bagian setelah tanda strip '-' terakhir)
             VERMAGIC_HASH=$(echo "$KMODS_DIR" | awk -F'-' '{print $NF}')
             echo "✅ Vermagic resmi ditemukan: $VERMAGIC_HASH"
-            
-            # Tulis hash ke file tersembunyi .vermagic
             echo "$VERMAGIC_HASH" > .vermagic
-            
-            # Ganti perintah pembuat vermagic di Makefile sistem agar menggunakan file kita
             sed -i 's|grep '\''=\[ym\]'\'' $(LINUX_DIR)/.config.set \| LC_ALL=C sort \| $(MKHASH) md5 > $(LINUX_DIR)/.vermagic|cp $(TOPDIR)/.vermagic $(LINUX_DIR)/.vermagic|g' ./include/kernel-defaults.mk
             sed -i 's|STAMP_BUILT:=$(STAMP_BUILT)_$(shell $(SCRIPT_DIR)/kconfig.pl $(LINUX_DIR)/.config \| $(MKHASH) md5)|STAMP_BUILT:=$(STAMP_BUILT)_$(shell cat $(LINUX_DIR)/.vermagic)|g' ./package/kernel/linux/Makefile
           fi
@@ -127,29 +131,19 @@ jobs:
         run: |
           echo 'CONFIG_CCACHE=y' > .config
           
-          # Konfigurasi Target Hardware (Hasil Patch)
           echo "CONFIG_TARGET_ramips=y" >> .config
           echo "CONFIG_TARGET_ramips_mt7621=y" >> .config
           echo "CONFIG_TARGET_ramips_mt7621_DEVICE_notion_r281=y" >> .config
           
-          # [1] PAKET GUI UTAMA
           echo "CONFIG_PACKAGE_luci=y" >> .config
           echo "CONFIG_PACKAGE_luci-ssl=y" >> .config
-          
-          # [2] DRIVER & PROTOKOL MODEM (PENTING)
           echo "CONFIG_PACKAGE_kmod-usb-net-qmi-wwan=y" >> .config
           echo "CONFIG_PACKAGE_uqmi=y" >> .config
           echo "CONFIG_PACKAGE_kmod-usb-net-cdc-mbim=y" >> .config
           echo "CONFIG_PACKAGE_umbim=y" >> .config
           echo "CONFIG_PACKAGE_kmod-usb-net-rndis=y" >> .config
           echo "CONFIG_PACKAGE_usb-modeswitch=y" >> .config
-          
-          # [3] PROTOKOL INTERFACE LUCI
           echo "CONFIG_PACKAGE_luci-proto-3g=y" >> .config
-          
-          # [4] UTENSIL DASAR (Bermanfaat untuk monitoring lewat SSH)
-          echo "CONFIG_PACKAGE_htop=y" >> .config
-          echo "CONFIG_PACKAGE_curl=y" >> .config
           
           make defconfig
 
