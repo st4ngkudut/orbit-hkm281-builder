@@ -105,7 +105,8 @@ jobs:
             IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
             DEVICE_VENDOR := Notion
             DEVICE_MODEL := R281
-            DEVICE_PACKAGES := kmod-usb3 kmod-mt7603 kmod-mt7615e kmod-mt7663-firmware-ap kmod-usb-acm kmod-usb-net-cdc-ncm comgt-ncm uboot-envtools
+            # BARIS INI DIPERBARUI: Memaksa semua driver modem & GUI masuk ke dalam firmware!
+            DEVICE_PACKAGES := kmod-usb3 kmod-mt7603 kmod-mt7615e kmod-mt7663-firmware-ap kmod-usb-acm kmod-usb-net-cdc-ncm kmod-usb-net-huawei-cdc-ncm comgt-ncm kmod-usb-net-qmi-wwan kmod-usb-net-cdc-mbim kmod-usb-serial-option usb-modeswitch modemmanager luci-app-modemmanager uboot-envtools
           endef
           TARGET_DEVICES += notion_r281
           EOF
@@ -160,7 +161,7 @@ jobs:
             sleep 15
           done
           ./scripts/feeds install -a
-
+          
       - name: 8. Sinkronisasi Vermagic Kernel
         working-directory: ./openwrt
         run: |
@@ -197,12 +198,21 @@ jobs:
           CONFIG_PACKAGE_luci-ssl=y
           CONFIG_PACKAGE_usbutils=y
           
+          # --- PONDASI WAJIB USB (Mencegah kmod modem dibuang oleh defconfig) ---
+          CONFIG_PACKAGE_kmod-usb-core=y
+          CONFIG_PACKAGE_kmod-usb2=y
+          CONFIG_PACKAGE_kmod-usb3=y
+          CONFIG_PACKAGE_kmod-usb-net=y
+          CONFIG_PACKAGE_kmod-mii=y
+          
           # --- Driver Spesifik NCM (Tanpa RNDIS) ---
           CONFIG_PACKAGE_kmod-usb-net-cdc-ncm=y
           CONFIG_PACKAGE_kmod-usb-net-huawei-cdc-ncm=y
           CONFIG_PACKAGE_comgt-ncm=y
           
           # --- Driver Pendukung Modem ---
+          CONFIG_PACKAGE_kmod-usb-serial=y
+          CONFIG_PACKAGE_kmod-usb-serial-wwan=y
           CONFIG_PACKAGE_kmod-usb-net-qmi-wwan=y
           CONFIG_PACKAGE_kmod-usb-net-cdc-mbim=y
           CONFIG_PACKAGE_kmod-usb-serial-option=y
