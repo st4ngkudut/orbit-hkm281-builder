@@ -1,4 +1,4 @@
-#by ST4NGKUDUT (Modded for Vanilla + Local Patch HKM281 + Dynamic Vermagic + GitHub Release)
+#by ST4NGKUDUT x AI (Modded for Vanilla + Local Patch HKM281 + Dynamic Vermagic + ModemManager)
 name: 'Build OpenWrt Vanilla + Patch HKM281'
 
 permissions:
@@ -94,7 +94,7 @@ jobs:
           
           echo "🛠️ 3. Mengatur susunan Port LAN/WAN agar tidak tertukar..."
           if [ -f target/linux/ramips/mt7621/base-files/etc/board.d/02_network ]; then
-            sed -i '/mikrotik,routerboard-760igs)/i \	notion,r281)|\n\tnotion,r281)\n\t\tucidef_set_interfaces_lan_wan "lan2 lan3 lan4" "wan"\n\t\t;;\n' target/linux/ramips/mt7621/base-files/etc/board.d/02_network
+            sed -i '/mikrotik,routerboard-760igs)/i \	notion,r281)\n\t\tucidef_set_interfaces_lan_wan "lan1 lan2 lan3" "wan"\n\t\t;;\n' target/linux/ramips/mt7621/base-files/etc/board.d/02_network
           else
             echo "⚠️ File 02_network tidak ditemukan, dilewati."
           fi
@@ -151,7 +151,7 @@ jobs:
             sed -i 's|STAMP_BUILT:=$(STAMP_BUILT)_$(shell $(SCRIPT_DIR)/kconfig.pl $(LINUX_DIR)/.config \| $(MKHASH) md5)|STAMP_BUILT:=$(STAMP_BUILT)_$(shell cat $(LINUX_DIR)/.vermagic)|g' ./package/kernel/linux/Makefile
           fi
 
-      - name: 8. Terapkan Konfigurasi & Modifikasi Kustom
+      - name: 8. Terapkan Konfigurasi & Modifikasi Kustom (ModemManager Edition)
         working-directory: ./openwrt
         run: |
           echo 'CONFIG_CCACHE=y' > .config
@@ -162,13 +162,17 @@ jobs:
           
           echo "CONFIG_PACKAGE_luci=y" >> .config
           echo "CONFIG_PACKAGE_luci-ssl=y" >> .config
+          echo "CONFIG_PACKAGE_usbutils=y" >> .config
+          
+          # Driver dasar
           echo "CONFIG_PACKAGE_kmod-usb-net-qmi-wwan=y" >> .config
-          echo "CONFIG_PACKAGE_uqmi=y" >> .config
           echo "CONFIG_PACKAGE_kmod-usb-net-cdc-mbim=y" >> .config
-          echo "CONFIG_PACKAGE_umbim=y" >> .config
-          echo "CONFIG_PACKAGE_kmod-usb-net-rndis=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-usb-serial-option=y" >> .config
           echo "CONFIG_PACKAGE_usb-modeswitch=y" >> .config
-          echo "CONFIG_PACKAGE_luci-proto-3g=y" >> .config
+          
+          # Sistem ModemManager
+          echo "CONFIG_PACKAGE_modemmanager=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-modemmanager=y" >> .config
           
           make defconfig
 
