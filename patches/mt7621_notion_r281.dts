@@ -8,7 +8,7 @@
 
 / {
 	compatible = "notion,r281", "mediatek,mt7621-soc";
-	model = "Notion R281";
+	model = "HKM281 aka Notion R281";
 
 	aliases {
 		led-boot = &boot_red;
