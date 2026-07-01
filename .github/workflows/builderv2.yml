@@ -13,9 +13,10 @@ on:
         description: 'Pilih Versi/Branch OpenWrt Vanilla'
         required: true
         type: choice
-        default: 'v23.05.4'
+        default: 'v25.12.4'
         options:
           - 'snapshot'
+          - 'v25.12.4'
           - 'v23.05.4'
           - 'v23.05.3'
           - 'v23.05.2'
