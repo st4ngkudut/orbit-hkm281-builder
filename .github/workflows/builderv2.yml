@@ -1,6 +1,6 @@
-# by ST4NGKUDUT x AI (Modded for Vanilla + Local Patch HKM281 + Dynamic Vermagic + ModemManager NCM)
-# Enhanced with Build Space Optimization & Advanced Build Logic
-name: 'Build OpenWrt Vanilla + Patch HKM281 (NCM)'
+# by ST4NGKUDUT x AI (Modded for Vanilla + Local Patch HKM281 + Dynamic Vermagic + ModemManager NCM/RNDIS Hybrid)
+# Enhanced with Build Space Optimization & Advanced Staged Build Logic
+name: 'Build OpenWrt Vanilla + Patch HKM281 (Hybrid)'
 
 permissions:
   contents: write
@@ -13,20 +13,16 @@ on:
         description: 'Pilih Versi/Branch OpenWrt Vanilla'
         required: true
         type: choice
-        default: 'v25.12.4'
+        default: 'v23.05.4'
         options:
-          - 'v25.12.4'
-          - 'v25.12.3'
-          - 'v25.12.2'
-          - 'v25.12.1'
-          - 'v25.12.0'
-          - 'v24.10.5'
-          - 'v24.10.4'
-          - 'v24.10.3'
-          - 'v24.10.2'
-          - 'v24.10.1'
-          - 'v24.10.0'
           - 'snapshot'
+          - 'v23.05.4'
+          - 'v23.05.3'
+          - 'v23.05.2'
+          - 'v23.05.1'
+          - 'v23.05.0'
+          - 'v22.03.6'
+          - 'v22.03.5'
 
 env:
   TZ: Asia/Jakarta
@@ -105,8 +101,7 @@ jobs:
             IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
             DEVICE_VENDOR := Notion
             DEVICE_MODEL := R281
-            # BARIS INI DIPERBARUI: Memaksa semua driver modem & GUI masuk ke dalam firmware!
-            DEVICE_PACKAGES := kmod-usb3 kmod-mt7603 kmod-mt7615e kmod-mt7663-firmware-ap kmod-usb-acm kmod-usb-net-cdc-ncm kmod-usb-net-huawei-cdc-ncm comgt-ncm kmod-usb-net-qmi-wwan kmod-usb-net-cdc-mbim kmod-usb-serial-option usb-modeswitch modemmanager luci-app-modemmanager uboot-envtools
+            DEVICE_PACKAGES := kmod-usb3 kmod-mt7603 kmod-mt7615e kmod-mt7663-firmware-ap kmod-usb-acm kmod-usb-net-cdc-ncm kmod-usb-net-huawei-cdc-ncm comgt-ncm kmod-usb-net-qmi-wwan kmod-usb-net-cdc-mbim kmod-usb-net-rndis kmod-usb-net-cdc-ether kmod-usb-serial-option usb-modeswitch modemmanager luci-app-modemmanager uboot-envtools
           endef
           TARGET_DEVICES += notion_r281
           EOF
@@ -132,7 +127,7 @@ jobs:
           cp ../patches/ncm.json package/network/utils/comgt/files/ncm.json 2>/dev/null || echo "⚠️ ncm.json tidak ditemukan di folder patches lokal."
           chmod +x package/network/utils/comgt/files/ncm.sh 2>/dev/null || true
           
-          echo "🛠️ 7. Menambahkan Auto-Config NCM untuk Modem Internal..."
+          echo "🛠️ 7. Menambahkan Auto-Config NCM (via ttyACM0) untuk Modem Internal..."
           mkdir -p target/linux/ramips/mt7621/base-files/etc/uci-defaults
           cat >> target/linux/ramips/mt7621/base-files/etc/uci-defaults/99-init-modem-ncm << 'EOF'
           #!/bin/sh
@@ -140,7 +135,7 @@ jobs:
           
           uci set network.modem=interface
           uci set network.modem.proto='ncm'
-          uci set network.modem.device='/dev/cdc-wdm0'
+          uci set network.modem.device='/dev/ttyACM0'
           uci set network.modem.apn='internet'
           uci set network.modem.delay='5'
           uci commit network
@@ -161,7 +156,7 @@ jobs:
             sleep 15
           done
           ./scripts/feeds install -a
-          
+
       - name: 8. Sinkronisasi Vermagic Kernel
         working-directory: ./openwrt
         run: |
@@ -185,7 +180,7 @@ jobs:
             sed -i 's|STAMP_BUILT:=$(STAMP_BUILT)_$(shell $(SCRIPT_DIR)/kconfig.pl $(LINUX_DIR)/.config \| $(MKHASH) md5)|STAMP_BUILT:=$(STAMP_BUILT)_$(shell cat $(LINUX_DIR)/.vermagic)|g' ./package/kernel/linux/Makefile
           fi
 
-      - name: 9. Terapkan Konfigurasi Kustom (ModemManager & NCM)
+      - name: 9. Terapkan Konfigurasi Kustom & Validasi
         working-directory: ./openwrt
         run: |
           cat >> .config << 'EOF'
@@ -198,17 +193,21 @@ jobs:
           CONFIG_PACKAGE_luci-ssl=y
           CONFIG_PACKAGE_usbutils=y
           
-          # --- PONDASI WAJIB USB (Mencegah kmod modem dibuang oleh defconfig) ---
+          # --- PONDASI WAJIB USB ---
           CONFIG_PACKAGE_kmod-usb-core=y
           CONFIG_PACKAGE_kmod-usb2=y
           CONFIG_PACKAGE_kmod-usb3=y
           CONFIG_PACKAGE_kmod-usb-net=y
           CONFIG_PACKAGE_kmod-mii=y
           
-          # --- Driver Spesifik NCM (Tanpa RNDIS) ---
+          # --- Driver Spesifik NCM ---
           CONFIG_PACKAGE_kmod-usb-net-cdc-ncm=y
           CONFIG_PACKAGE_kmod-usb-net-huawei-cdc-ncm=y
           CONFIG_PACKAGE_comgt-ncm=y
+          
+          # --- Driver RNDIS & ECM (Jalur Data HKM281) ---
+          CONFIG_PACKAGE_kmod-usb-net-rndis=y
+          CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y
           
           # --- Driver Pendukung Modem ---
           CONFIG_PACKAGE_kmod-usb-serial=y
@@ -223,6 +222,10 @@ jobs:
           CONFIG_PACKAGE_luci-app-modemmanager=y
           EOF
           make defconfig
+          
+          echo "🔍 MEMVALIDASI PAKET: Memastikan paket tidak dihapus oleh sistem..."
+          grep -q "CONFIG_PACKAGE_modemmanager=y" .config && echo "✅ ModemManager AMAN" || echo "❌ ModemManager TERHAPUS!"
+          grep -q "CONFIG_PACKAGE_kmod-usb-net-rndis=y" .config && echo "✅ Driver RNDIS AMAN" || echo "❌ Driver RNDIS TERHAPUS!"
 
       - name: 10. Download Dependensi (DL)
         working-directory: ./openwrt
@@ -231,7 +234,7 @@ jobs:
           find dl -size -1024c -exec ls -l {} \;
           find dl -size -1024c -exec rm -f {} \;
 
-      - name: 11. Mulai Proses Build
+      - name: 11. Mulai Proses Build (Staged & Strict)
         working-directory: ./openwrt
         env:
           CCACHE_DIR: ${{ github.workspace }}/openwrt/.ccache
@@ -239,7 +242,19 @@ jobs:
         run: |
           ccache -s
           echo -e "$(nproc) Thread Compile Digunakan"
-          make -j$(nproc) IGNORE_ERRORS="m n" || make -j1 V=s IGNORE_ERRORS=1
+          
+          echo "⏳ TAHAP 1: Compile Kernel & Target Dasar..."
+          make target/compile -j$(nproc) || make target/compile -j1 V=s
+          
+          echo "⏳ TAHAP 2: Compile Semua Paket (ModemManager, LuCI, KMOD)..."
+          make package/compile -j$(nproc) || make package/compile -j1 V=s
+          
+          echo "⏳ TAHAP 3: Menginstal Paket ke dalam RootFS Firmware..."
+          make package/install -j$(nproc) || make package/install -j1 V=s
+          
+          echo "⏳ TAHAP 4: Membungkus File Sysupgrade.bin..."
+          make target/install -j$(nproc) || make target/install -j1 V=s
+          
           ccache -s
 
       - name: 12. Siapkan Berkas untuk Rilis
@@ -265,4 +280,4 @@ jobs:
             - **Target:** MediaTek MT7621 (HKM281 / Notion R281)
             - **OpenWrt Version:** ${{ github.event.inputs.openwrt_version }}
             - **Build Date:** ${{ env.BUILD_DATE }}
-            - **Features:** ModemManager, Full NCM Protocol (with Custom Core), USB QMI/MBIM, Anti-RNDIS Double NAT
+            - **Features:** ModemManager, Hybrid NCM-RNDIS Protocol (ttyACM0 via Custom Core), USB QMI/MBIM, Staged Build
